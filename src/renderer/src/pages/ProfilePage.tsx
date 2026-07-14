@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
 import { Notice } from "@/components/ui/state";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { cn, formatDateTimeWIB } from "@/lib/utils";
 
 type Profile = {
@@ -99,6 +99,10 @@ export function ProfilePage(): JSX.Element {
   }
 
   async function testLogin(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setAuth({ status: "not_logged_in", message: "Tes login interaktif hanya tersedia di desktop lokal. Worker production memakai Chromium headless.", lastCheckedAt: new Date().toISOString() });
+      return;
+    }
     setBusy("login");
     setAuth({ status: "checking", message: "Membuka login SKP...", lastCheckedAt: "" });
     try {
@@ -140,7 +144,7 @@ export function ProfilePage(): JSX.Element {
           <p className="section-description">Simpan username dan password SKP untuk auto-login lokal di perangkat ini.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={testLogin} disabled={busy !== null}>
+          <Button variant="secondary" onClick={testLogin} disabled={busy !== null || isVercelDeployTarget}>
             <KeyRound size={16} />Tes Login SKP
           </Button>
           <Button onClick={save} disabled={busy !== null}>
@@ -180,7 +184,7 @@ export function ProfilePage(): JSX.Element {
               <Button onClick={save} disabled={busy !== null}>
                 <Save size={16} />Simpan Credential
               </Button>
-              <Button variant="secondary" onClick={testLogin} disabled={busy !== null}>
+              <Button variant="secondary" onClick={testLogin} disabled={busy !== null || isVercelDeployTarget}>
                 <KeyRound size={16} />Tes Login SKP
               </Button>
               <Button variant="secondary" onClick={clearCredentials} disabled={busy !== null || !hasStoredCredential}>

@@ -1,0 +1,24 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build:api
+
+FROM node:20-bookworm-slim
+
+ENV NODE_ENV=production \
+    KAEMSKP_API_MODE=api \
+    KAEMSKP_NO_OPEN=1 \
+    KAEMSKP_DISABLE_LOCAL_SCHEDULER=1
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /app/dist/server ./dist/server
+RUN chown -R node:node /app
+
+USER node
+EXPOSE 3726
+CMD ["npm", "run", "start:api"]

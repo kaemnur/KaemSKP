@@ -2,6 +2,15 @@ import { supabase } from "@/lib/supabase";
 
 type QueryValue = string | number | boolean | undefined | null;
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim().replace(/\/+$/, "") ?? "";
+
+export const isVercelDeployTarget = import.meta.env.VITE_DEPLOY_TARGET === "vercel";
+
+function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return apiBaseUrl ? `${apiBaseUrl}${normalizedPath}` : normalizedPath;
+}
+
 function toQuery(params?: Record<string, QueryValue>): string {
   if (!params) return "";
   const query = new URLSearchParams();
@@ -15,7 +24,7 @@ function toQuery(params?: Record<string, QueryValue>): string {
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const session = supabase ? (await supabase.auth.getSession()).data.session : null;
   const authHeaders = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     headers: options.body instanceof FormData
       ? { ...authHeaders, ...(options.headers ?? {}) }

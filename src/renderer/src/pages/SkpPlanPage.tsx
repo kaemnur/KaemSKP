@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { EmptyState, ErrorState, LoadingState, Notice } from "@/components/ui/state";
 import { DataTable, TableCard } from "@/components/ui/table";
 import { TabButton, Tabs } from "@/components/ui/tabs";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { formatDateID, formatDateTimeWIB, friendlyErrorMessage } from "@/lib/utils";
 
 type TabKey = "active" | "master" | "mapping" | "import";
@@ -426,6 +426,10 @@ function MappingWebsiteTab({
   const [message, setMessage] = useState<string | null>(null);
 
   async function refreshFromSite(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setMessage("Refresh opsi dari website SKP hanya tersedia di desktop lokal atau worker flow.");
+      return;
+    }
     if (!summary?.hasActivePlan) {
       setMessage("Belum ada Rencana SKP aktif. Silakan upload PDF Rencana SKP terlebih dahulu.");
       return;
@@ -490,7 +494,7 @@ function MappingWebsiteTab({
           <p className="section-description">Cocokkan master SKP lokal dari Rencana SKP dengan pilihan di website SKP.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={refreshFromSite} disabled={loadingOptions || !summary?.hasActivePlan}>
+          <Button variant="secondary" onClick={refreshFromSite} disabled={loadingOptions || !summary?.hasActivePlan || isVercelDeployTarget}>
             <RefreshCw className={loadingOptions ? "animate-spin" : ""} size={16} />Refresh Opsi SKP
           </Button>
           <Button variant="secondary" onClick={autoMatch} disabled={!summary?.hasActivePlan}><Wand2 size={16} />Auto Match</Button>

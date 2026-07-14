@@ -3,7 +3,7 @@ import { Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { formatDateID, parseDateID, todayDateKeyWIB } from "@/lib/utils";
 
 export function QueuePage(): JSX.Element {
@@ -12,6 +12,7 @@ export function QueuePage(): JSX.Element {
   const [result, setResult] = useState<Record<string, number> | null>(null);
 
   async function run(action: string): Promise<void> {
+    if (isVercelDeployTarget) return;
     if (action === "today") setResult(await api.runToday());
     if (action === "missed") setResult(await api.runMissed());
     if (action === "range") setResult(await api.runRange({ dateFrom: parseDateID(dateFrom), dateTo: parseDateID(dateTo), mode: "range" }));
@@ -29,14 +30,14 @@ export function QueuePage(): JSX.Element {
       <Card>
         <CardHeader><CardTitle>Aksi Antrean</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
-          <Button onClick={() => run("today")}><Play size={16} />Jalankan Hari Ini</Button>
-          <Button variant="secondary" onClick={() => run("missed")}><RotateCcw size={16} />Jalankan Semua yang Terlewat</Button>
+          <Button disabled={isVercelDeployTarget} onClick={() => run("today")}><Play size={16} />Jalankan Hari Ini</Button>
+          <Button disabled={isVercelDeployTarget} variant="secondary" onClick={() => run("missed")}><RotateCcw size={16} />Jalankan Semua yang Terlewat</Button>
           <div><Label>Tanggal mulai</Label><Input inputMode="numeric" placeholder="dd/MM/yyyy" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
           <div><Label>Tanggal akhir</Label><Input inputMode="numeric" placeholder="dd/MM/yyyy" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
-          <Button variant="secondary" onClick={() => run("range")}>Jalankan Periode Terpilih</Button>
-          <Button variant="secondary" onClick={() => run("retry")}>Retry Gagal</Button>
-          <Button variant="ghost" onClick={() => run("pause")}><Pause size={16} />Pause</Button>
-          <Button variant="ghost" onClick={() => run("resume")}><Play size={16} />Resume</Button>
+          <Button disabled={isVercelDeployTarget} variant="secondary" onClick={() => run("range")}>Jalankan Periode Terpilih</Button>
+          <Button disabled={isVercelDeployTarget} variant="secondary" onClick={() => run("retry")}>Retry Gagal</Button>
+          <Button disabled={isVercelDeployTarget} variant="ghost" onClick={() => run("pause")}><Pause size={16} />Pause</Button>
+          <Button disabled={isVercelDeployTarget} variant="ghost" onClick={() => run("resume")}><Play size={16} />Resume</Button>
         </CardContent>
       </Card>
       {result && (

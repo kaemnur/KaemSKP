@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { cn, formatDate, statusLabel } from "@/lib/utils";
 
 type Day = Record<string, string | number>;
@@ -101,7 +101,7 @@ export function CalendarPage(): JSX.Element {
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => api.runRange({ dateFrom: String(selected.day?.date), dateTo: String(selected.day?.date), mode: "range" })}>Jalankan Tanggal Ini</Button>
+                  <Button size="sm" variant="secondary" disabled={isVercelDeployTarget} onClick={() => api.runRange({ dateFrom: String(selected.day?.date), dateTo: String(selected.day?.date), mode: "range" })}>Jalankan Tanggal Ini</Button>
                   <Button size="sm" variant="secondary">Edit</Button>
                   <Button size="sm" variant="ghost" onClick={() => mark("public_holiday", "public_holiday", "Tanggal merah")}>Tandai Libur</Button>
                   <Button size="sm" variant="ghost" onClick={() => mark("leave", "leave", "Cuti")}>Tandai Cuti</Button>

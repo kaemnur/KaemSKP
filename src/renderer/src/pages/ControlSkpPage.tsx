@@ -10,7 +10,7 @@ import { Input, Label, Select } from "@/components/ui/field";
 import { EmptyState, Notice } from "@/components/ui/state";
 import { DataTable, TableCard } from "@/components/ui/table";
 import { TabButton, Tabs } from "@/components/ui/tabs";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { cn, formatDate, formatDateID, formatDateTimeWIB, friendlyErrorMessage, statusLabel, todayDateKeyWIB, toDateInputValue } from "@/lib/utils";
 
 type TabKey = "run" | "queue" | "calendar" | "history";
@@ -99,6 +99,10 @@ function RunTab(): JSX.Element {
   async function runSelected(override?: { dateFrom: string; dateTo: string; mode: RunMode }): Promise<void> {
     setWarning(null);
     setMessage(null);
+    if (isVercelDeployTarget) {
+      setWarning("Pengiriman langsung dari browser Vercel dinonaktifkan. Auto Post production dijalankan oleh worker Railway.");
+      return;
+    }
     const from = toDateInputValue(override?.dateFrom ?? dateFrom);
     const to = toDateInputValue(override?.dateTo ?? dateTo);
     const selectedMode = override?.mode ?? mode;
@@ -166,12 +170,13 @@ function RunTab(): JSX.Element {
             <Button variant="secondary" disabled={busy} onClick={() => void previewSelected()}>
               <ListChecks size={16} />Preview Jumlah Data
             </Button>
-            {busy && <Button variant="secondary" disabled={!jobId} onClick={() => jobId && api.stopRunJob(jobId)}><Square size={16} />Stop Proses</Button>}
-            <Button disabled={busy} onClick={() => void runSelected()}>
+            {busy && !isVercelDeployTarget && <Button variant="secondary" disabled={!jobId} onClick={() => jobId && api.stopRunJob(jobId)}><Square size={16} />Stop Proses</Button>}
+            <Button disabled={busy || isVercelDeployTarget} onClick={() => void runSelected()}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play size={16} />}
               Kirim Data Terpilih
             </Button>
           </div>
+          {isVercelDeployTarget && <Notice tone="warning">Auto Post production berjalan di worker Railway pada jadwal 08:00 WIB.</Notice>}
           {busy && <Notice tone="warning">Jangan tutup aplikasi sampai proses selesai.</Notice>}
           {message && <Notice tone="success"><CheckCircle2 size={16} />{message}</Notice>}
           {warning && <Notice tone="warning">{warning}</Notice>}

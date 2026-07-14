@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/field";
 import { EmptyState, Notice } from "@/components/ui/state";
 import { DataTable, TableCard } from "@/components/ui/table";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 
 type Mapping = {
   kode_skp: string;
@@ -46,6 +46,10 @@ export function MappingPage(): JSX.Element {
   }, []);
 
   async function refreshFromSite(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setMessage("Refresh opsi dari website SKP hanya tersedia di desktop lokal atau worker flow.");
+      return;
+    }
     if (!summary?.hasActivePlan) {
       setMessage("Belum ada Rencana SKP aktif. Silakan import PDF Rencana SKP terlebih dahulu.");
       return;
@@ -109,7 +113,7 @@ export function MappingPage(): JSX.Element {
           <p className="section-description">Cek kecocokan master lokal dari Rencana SKP dengan opsi dari website SKP.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={refreshFromSite} disabled={loadingOptions || !summary?.hasActivePlan}>
+          <Button variant="secondary" onClick={refreshFromSite} disabled={loadingOptions || !summary?.hasActivePlan || isVercelDeployTarget}>
             <RefreshCw className={loadingOptions ? "animate-spin" : ""} size={16} />Refresh Opsi SKP
           </Button>
           <Button variant="secondary" onClick={autoMatch} disabled={!summary?.hasActivePlan}><Wand2 size={16} />Auto Match</Button>

@@ -2,7 +2,6 @@ import cors from "cors";
 import express from "express";
 import multer from "multer";
 import { createServer } from "node:http";
-import net from "node:net";
 import { exec } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -89,14 +88,36 @@ import {
   saveSkpSession
 } from "./services/skpSecureStore";
 
-dotenv.config({ path: join(process.cwd(), ".env.local") });
+dotenv.config({ path: join(process.cwd(), ".env.local"), override: false });
 
-const PORT = 3726;
-const HOST = "127.0.0.1";
-const isDev = process.env.NODE_ENV !== "production" && process.argv.includes("--dev");
+const PORT = Number(process.env.PORT ?? process.env.KAEMSKP_PORT ?? 3726) || 3726;
+const isProduction = process.env.NODE_ENV === "production";
+const isDev = !isProduction && process.argv.includes("--dev");
+const isApiOnlyMode = process.env.KAEMSKP_API_MODE === "api" || Boolean(process.env.RAILWAY_ENVIRONMENT);
+const HOST = process.env.KAEMSKP_HOST || (isProduction ? "0.0.0.0" : "127.0.0.1");
 const PASSWORD_MASK = "********";
 let lastPreview: ImportPreview | null = null;
 let lastSkpPlanPreview: SkpPlanParseResult | null = null;
+
+function corsOrigin(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void): void {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  const allowedOrigins = (process.env.CORS_ORIGIN ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(origin);
+
+  if (isProduction) {
+    callback(null, allowedOrigins.includes(origin));
+    return;
+  }
+
+  callback(null, isLocalhost || allowedOrigins.includes(origin));
+}
 
 async function main(): Promise<void> {
   initDatabase();
@@ -105,7 +126,12 @@ async function main(): Promise<void> {
   }
 
   const app = express();
-  app.use(cors({ origin: true }));
+  app.use(cors({
+    origin: corsOrigin,
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  }));
   app.use(express.json({ limit: "10mb" }));
 
   const uploadDir = join(getDataDir(), "imports");
@@ -114,7 +140,7 @@ async function main(): Promise<void> {
 
   app.get("/api/health", (_req, res) => {
     const backend = requestedBackend();
-    res.json({ ok: true, name: "KaemSKP", port: serverAddress?.port ?? null, dataBackend: backend, fallbackUsed: false });
+    res.json({ ok: true, name: "KaemSKP", port: serverAddress?.port ?? null, dataBackend: backend, fallbackUsed: false, apiOnly: isApiOnlyMode });
   });
   app.get("/api/health/database", requireSupabaseAuth, async (req, res, next) => {
     try {
@@ -175,6 +201,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/profile/test-login", async (req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await openLoginForRequest(req));
     } catch (error) {
       next(error);
@@ -438,6 +465,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/mapping-skp/refresh", async (_req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       const options = await fetchSkpDropdownOptions();
       res.json(options);
     } catch (error) {
@@ -482,6 +510,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/periodic/fill", async (req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(
         await fillPeriodicFromPreview({
           year: req.body?.year ? Number(req.body.year) : undefined,
@@ -497,6 +526,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/periodic/submit", async (req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(
         await submitPeriodicOnly({
           year: req.body?.year ? Number(req.body.year) : undefined,
@@ -526,6 +556,7 @@ async function main(): Promise<void> {
 
   app.post("/api/run/today", async (_req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await runToday());
     } catch (error) {
       next(error);
@@ -533,6 +564,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/run/missed", async (_req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await runMissed());
     } catch (error) {
       next(error);
@@ -540,6 +572,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/run/range", async (req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await runRange(req.body.dateFrom, req.body.dateTo, req.body.mode ?? "range"));
     } catch (error) {
       next(error);
@@ -558,16 +591,19 @@ async function main(): Promise<void> {
   });
   app.post("/api/run/retry-failed", async (_req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await retryFailed());
     } catch (error) {
       next(error);
     }
   });
   app.post("/api/scheduler/pause", (_req, res) => {
+    if (isApiOnlyMode) return deploymentOnlyResponse(res);
     pauseScheduler();
     res.json({ ok: true });
   });
   app.post("/api/scheduler/resume", (_req, res) => {
+    if (isApiOnlyMode) return deploymentOnlyResponse(res);
     resumeScheduler();
     res.json({ ok: true });
   });
@@ -626,6 +662,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/auth/open-login", async (req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await openLoginForRequest(req));
     } catch (error) {
       next(error);
@@ -648,17 +685,20 @@ async function main(): Promise<void> {
   });
   app.post("/api/skp/open-log-page", async (_req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await openSkp());
     } catch (error) {
       next(error);
     }
   });
   app.post("/api/system/open-data-dir", (_req, res) => {
+    if (isApiOnlyMode) return deploymentOnlyResponse(res);
     openPath(getDataDir());
     res.json({ ok: true });
   });
   app.post("/api/system/backup-database", async (_req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       res.json(await backupDatabase());
     } catch (error) {
       next(error);
@@ -666,6 +706,7 @@ async function main(): Promise<void> {
   });
   app.post("/api/system/restore-database", upload.single("file"), (req, res, next) => {
     try {
+      if (isApiOnlyMode) return deploymentOnlyResponse(res);
       if (!req.file) throw new Error("File database belum dipilih.");
       res.json(restoreDatabaseFromFile(req.file.path));
     } catch (error) {
@@ -673,6 +714,7 @@ async function main(): Promise<void> {
     }
   });
   app.post("/api/system/clear-local-logs", (_req, res) => {
+    if (isApiOnlyMode) return deploymentOnlyResponse(res);
     res.json(clearLocalLogData());
   });
 
@@ -689,10 +731,12 @@ async function main(): Promise<void> {
       appType: "spa"
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!isApiOnlyMode) {
     const webDir = join(__dirname, "..", "..", "web");
     app.use(express.static(webDir));
     app.get("*", (_req, res) => res.sendFile(join(webDir, "index.html")));
+  } else {
+    app.use((_req, res) => res.status(404).json({ ok: false, message: "Route tidak tersedia di service API." }));
   }
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -700,31 +744,20 @@ async function main(): Promise<void> {
     res.status(500).json({ ok: false, message });
   });
 
-  if (!(await isPortFree(PORT))) {
-    throw new Error("Port 3726 sedang digunakan. Tutup proses KaemSKP lama.");
-  }
   const server = createServer(app);
   server.listen(PORT, HOST, () => {
     serverAddress = { port: PORT };
     const url = `http://${HOST}:${PORT}`;
     console.log(`KaemSKP berjalan di ${url}`);
-    openBrowser(url);
+    if (!isProduction && !isApiOnlyMode) openBrowser(url);
   });
 }
 
 let serverAddress: { port: number } | null = null;
 
-function isPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const tester = net.createServer();
-    tester.once("error", () => resolve(false));
-    tester.once("listening", () => tester.close(() => resolve(true)));
-    tester.listen(port, HOST);
-  });
-}
-
 function openBrowser(url: string): void {
   if (process.env.KAEMSKP_NO_OPEN === "1") return;
+  if (isProduction) return;
   if (process.platform === "win32") {
     exec(`start "" "${url}"`);
   } else if (process.platform === "darwin") {
@@ -735,6 +768,7 @@ function openBrowser(url: string): void {
 }
 
 function openPath(path: string): void {
+  if (isApiOnlyMode) return;
   if (process.platform === "win32") {
     exec(`explorer "${path}"`);
   } else if (process.platform === "darwin") {
@@ -742,6 +776,14 @@ function openPath(path: string): void {
   } else {
     exec(`xdg-open "${path}"`);
   }
+}
+
+function deploymentOnlyResponse(res: express.Response): express.Response {
+  return res.status(409).json({
+    ok: false,
+    code: "FEATURE_NOT_AVAILABLE_ON_RAILWAY_API",
+    message: "Fitur ini hanya tersedia di aplikasi desktop lokal atau melalui background worker yang sesuai."
+  });
 }
 
 function todayLogStatusError(): Record<string, unknown> {

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { cn, formatDate, formatDateTimeWIB, friendlyErrorMessage, statusLabel, todayDateKeyWIB } from "@/lib/utils";
 
 type TodayLogState = "no_log" | "not_submitted" | "queued" | "running" | "submitted" | "failed" | "future" | "needs_review" | "error";
@@ -78,6 +78,10 @@ export function TodayLogCard({
 
   async function runNow(): Promise<void> {
     if (!status?.canSubmit || busy || syncing) return;
+    if (isVercelDeployTarget) {
+      setError("Kirim manual dari Vercel dinonaktifkan. Worker Railway menjalankan Auto Post production.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -176,7 +180,7 @@ export function TodayLogCard({
             {condition.actions.includes("queue") && <ActionLink to="/kirim-skp?tab=antrean" icon={<RefreshCw size={16} />} label="Lihat Antrean" variant="secondary" />}
             {condition.actions.includes("data") && <ActionLink to={`/log-harian?tab=daftar-log&date=${status?.date ?? ""}`} icon={<ClipboardList size={16} />} label="Lihat Data" variant="secondary" />}
             {condition.actions.includes("send") && (
-              <Button disabled={busy || syncing || !status?.canSubmit} onClick={() => void runNow()} className="w-full sm:w-auto">
+              <Button disabled={busy || syncing || !status?.canSubmit || isVercelDeployTarget} onClick={() => void runNow()} className="w-full sm:w-auto">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />}
                 Kirim Sekarang
               </Button>
@@ -188,7 +192,7 @@ export function TodayLogCard({
               </Button>
             )}
             {condition.actions.includes("retry") && (
-              <Button disabled={busy || syncing || !status?.canSubmit} onClick={() => void runNow()} className="w-full sm:w-auto">
+              <Button disabled={busy || syncing || !status?.canSubmit || isVercelDeployTarget} onClick={() => void runNow()} className="w-full sm:w-auto">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play size={16} />}
                 Coba Lagi
               </Button>

@@ -78,7 +78,7 @@ export async function openLogin(): Promise<SkpAuthStatus> {
   const { username } = getSkpCredentials();
 
   try {
-    const page = await getAuthPage(false);
+    const page = await getAuthPage(shouldUseHeadlessLogin());
     await gotoBase(page);
     await clickLoginNonPortal(page);
     await waitForLoginForm(page);
@@ -97,6 +97,10 @@ export async function openLogin(): Promise<SkpAuthStatus> {
     const message = error instanceof Error ? error.message : "Login SKP belum selesai.";
     return persistStatus(createStatus("error", message, username));
   }
+}
+
+function shouldUseHeadlessLogin(): boolean {
+  return process.env.KAEMSKP_FORCE_HEADLESS === "1" || process.env.WORKER_PROCESS === "1";
 }
 
 export async function openSkp(): Promise<SkpAuthStatus> {

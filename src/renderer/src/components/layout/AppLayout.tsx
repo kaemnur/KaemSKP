@@ -4,7 +4,7 @@ import { CalendarCheck, ClipboardList, FileText, Home, KeyRound, Loader2, LogOut
 import { AppLogo } from "@/components/layout/AppLogo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { isSupabaseFrontendConfigured, supabase } from "@/lib/supabase";
 import { cn, formatRealtimeWIB, statusLabel } from "@/lib/utils";
 
@@ -92,6 +92,10 @@ export function AppLayout(): JSX.Element {
   }
 
   async function checkSession(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setSession({ status: "not_logged_in", message: "Cek session browser SKP tersedia lewat API/worker, bukan dari browser Vercel." });
+      return;
+    }
     setBusy("check");
     setSession({ status: "checking", message: "Mengecek session..." });
     try {
@@ -102,6 +106,10 @@ export function AppLayout(): JSX.Element {
   }
 
   async function login(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setSession({ status: "not_logged_in", message: "Login interaktif SKP hanya tersedia di aplikasi desktop lokal. Production memakai worker headless." });
+      return;
+    }
     setBusy("login");
     setSession({ status: "checking", message: "Membuka login SKP..." });
     try {
@@ -206,9 +214,9 @@ export function AppLayout(): JSX.Element {
       <aside className="shrink-0 border-b border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-950 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-4 dark:border-slate-800 lg:block">
           <AppLogo />
-          <div className="hidden rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:block lg:mt-4 lg:inline-flex">
+          {!isVercelDeployTarget && <div className="hidden rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:block lg:mt-4 lg:inline-flex">
             Port 3726
-          </div>
+          </div>}
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-1 lg:flex-col lg:overflow-visible lg:py-4" aria-label="Menu utama">
           {menu.map((item) => (
@@ -228,7 +236,7 @@ export function AppLayout(): JSX.Element {
           ))}
         </nav>
         <div className="hidden border-t border-slate-100 px-4 py-4 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400 lg:block">
-          Data dan sesi tersimpan di perangkat ini.
+          {isVercelDeployTarget ? "Data dan session dikelola oleh API dan worker production." : "Data dan sesi tersimpan di perangkat ini."}
         </div>
       </aside>
 
@@ -249,11 +257,11 @@ export function AppLayout(): JSX.Element {
               <div className="hidden max-w-[220px] truncate rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 md:block">
                 {authUserEmail}
               </div>
-              <Button size="sm" variant="secondary" disabled={busy !== null} onClick={checkSession}>
+              {!isVercelDeployTarget && <Button size="sm" variant="secondary" disabled={busy !== null} onClick={checkSession}>
                 {busy === "check" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={14} />}
                 {busy === "check" ? "Mengecek..." : "Cek"}
-              </Button>
-              {needsLogin && (
+              </Button>}
+              {needsLogin && !isVercelDeployTarget && (
                 <Button size="sm" disabled={busy !== null} onClick={login}>
                   {busy === "login" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound size={14} />}
                   {busy === "login" ? "Membuka..." : "Login SKP"}

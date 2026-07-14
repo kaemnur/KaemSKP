@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist/web",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

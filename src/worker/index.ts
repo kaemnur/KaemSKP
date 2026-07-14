@@ -4,6 +4,10 @@ import { createAutoPostWorkerService } from "./autoPostWorker";
 
 loadEnv({ path: join(process.cwd(), ".env.local"), override: false, quiet: true });
 
+process.env.WORKER_PROCESS = "1";
+process.env.KAEMSKP_FORCE_HEADLESS = "1";
+process.env.TZ = process.env.TZ || "Asia/Jakarta";
+
 const tickSeconds = Math.min(60, Math.max(5, Number(process.env.WORKER_TICK_SECONDS ?? 60) || 60));
 const dryRun = process.env.WORKER_DRY_RUN !== "false" || process.env.WORKER_ALLOW_REAL_SEND !== "true";
 const service = createAutoPostWorkerService();

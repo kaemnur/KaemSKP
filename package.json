@@ -9,8 +9,11 @@
   "scripts": {
     "dev": "tsx src/server/index.ts --dev",
     "worker": "tsx src/worker/index.ts",
+    "build:web": "vite build",
+    "build:api": "tsc -p tsconfig.server.json",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
+    "start:api": "node dist/server/server/index.js",
     "launcher": "node scripts/start-kaemskp.cjs",
     "diagnose:skp": "tsx scripts/skp-diagnostic.ts",
     "audit:sqlite": "tsx scripts/audit-sqlite.ts",
@@ -19,6 +22,7 @@
     "test:runtime-auth-rls": "tsx scripts/test-runtime-auth-rls.ts",
     "test:next-auto-post": "tsx scripts/test-next-auto-post.ts",
     "test:worker-scheduler": "tsx scripts/test-worker-scheduler.ts",
+    "test:deployment-safe": "tsx scripts/test-deployment-safe.ts",
     "dist": "npm run build"
   },
   "dependencies": {

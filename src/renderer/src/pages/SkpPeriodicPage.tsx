@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { EmptyState, ErrorState, LoadingState, Notice } from "@/components/ui/state";
 import { DataTable, TableCard } from "@/components/ui/table";
 import { TabButton, Tabs } from "@/components/ui/tabs";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { cn, formatDateID, formatDateTimeWIB, friendlyErrorMessage, statusLabel, todayDateKeyWIB } from "@/lib/utils";
 
 const DEFAULT_FEEDBACK_LINK = "https://drive.google.com/drive/folders/1ln6FSUk550YVlnToaoZ1EUalAVjuIBWB";
@@ -322,6 +322,13 @@ export function SkpPeriodicPage(): JSX.Element {
       await generate();
       return;
     }
+    if (isVercelDeployTarget) {
+      setError({
+        title: "Proses website dinonaktifkan",
+        message: "Isi dan ajukan SKP Periodik dari browser Vercel dinonaktifkan. Gunakan worker/API flow yang sesuai untuk production."
+      });
+      return;
+    }
     // Guard sebelum kirim: preview wajib ada dan sesuai triwulan/tahun yang dipilih.
     if (!preview || !previewMatchesSelection) {
       setError({
@@ -482,7 +489,7 @@ export function SkpPeriodicPage(): JSX.Element {
                   {busy === "refresh" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}
                   Refresh Status
                 </Button>
-                <Button disabled={busy !== null} onClick={() => void runMode()}>
+                <Button disabled={busy !== null || (isVercelDeployTarget && mode !== "preview")} onClick={() => void runMode()}>
                   {busy === "generate" || busy === "fill" || busy === "submit" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play size={16} />}
                   Jalankan Proses
                 </Button>
@@ -502,7 +509,7 @@ export function SkpPeriodicPage(): JSX.Element {
           )}
           {error?.screenshotPath && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => void api.openSkp()}><ExternalLink size={16} />Buka Website SKP</Button>
+              <Button variant="secondary" disabled={isVercelDeployTarget} onClick={() => void api.openSkp()}><ExternalLink size={16} />Buka Website SKP</Button>
             </div>
           )}
           {busy === "fill" && <Notice tone="warning"><Loader2 className="h-4 w-4 animate-spin" />Mengisi website SKP. Jangan tutup aplikasi sampai proses selesai.</Notice>}
@@ -578,7 +585,7 @@ export function SkpPeriodicPage(): JSX.Element {
               <Button variant="secondary" onClick={() => setPendingSend(null)}>Batal</Button>
               <Button
                 variant={pendingSend === "fill_submit" ? "danger" : "primary"}
-                disabled={!previewMatchesSelection || selectedRows.length === 0}
+                disabled={!previewMatchesSelection || selectedRows.length === 0 || isVercelDeployTarget}
                 onClick={() => void proceedPendingSend()}
               >
                 <Send size={16} />

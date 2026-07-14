@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatePickerField } from "@/components/ui/date-picker";
 import { Input, Label, Select } from "@/components/ui/field";
 import { Notice } from "@/components/ui/state";
-import { api } from "@/lib/api";
+import { api, isVercelDeployTarget } from "@/lib/api";
 import { formatDateTimeWIB } from "@/lib/utils";
 
 type SkpAuthStatus = {
@@ -52,11 +52,19 @@ export function SettingsPage(): JSX.Element {
   }
 
   async function checkSession(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setSession({ status: "not_logged_in", message: "Cek session browser SKP dijalankan oleh worker production, bukan browser Vercel.", lastCheckedAt: new Date().toISOString() });
+      return;
+    }
     setSession({ status: "checking", message: "Sedang mengecek session SKP.", lastCheckedAt: "" });
     setSession(await api.checkSession());
   }
 
   async function clearSession(): Promise<void> {
+    if (isVercelDeployTarget) {
+      setSession({ status: "not_logged_in", message: "Hapus session lokal hanya tersedia di aplikasi desktop.", lastCheckedAt: new Date().toISOString() });
+      return;
+    }
     setSession(await api.clearSession());
   }
 
@@ -199,7 +207,6 @@ export function SettingsPage(): JSX.Element {
           <CardContent className="space-y-3">
             <StatusRow icon={<Cloud size={16} />} label="Frontend" active={Boolean(supabaseStatus?.frontendReady)} />
             <StatusRow icon={<KeyRound size={16} />} label="Secret backend" active={Boolean(supabaseStatus?.secretKeyConfigured)} />
-            <StatusRow icon={<Database size={16} />} label="Database URL" active={Boolean(supabaseStatus?.databaseUrlConfigured)} />
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
               {String(supabaseStatus?.message ?? "Status Supabase belum dimuat.")}
             </div>
@@ -244,7 +251,7 @@ export function SettingsPage(): JSX.Element {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-2">
+        {!isVercelDeployTarget && <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Data Lokal</CardTitle>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Lokasi database, backup, restore, dan pembersihan data log lokal.</p>
@@ -268,7 +275,7 @@ export function SettingsPage(): JSX.Element {
             </div>
             {dataNotice && <Notice tone="success">{dataNotice}</Notice>}
           </CardContent>
-        </Card>
+        </Card>}
 
         <Card className="xl:col-span-2">
           <CardHeader>
@@ -281,8 +288,11 @@ export function SettingsPage(): JSX.Element {
                 Username dan password tidak diatur di sini. Kelola credential login dari menu Profil agar tidak tumpang tindih dengan preferensi aplikasi.
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                {isVercelDeployTarget && <Notice tone="warning">Fitur session lokal tersedia melalui aplikasi desktop atau worker production.</Notice>}
+                {!isVercelDeployTarget && <>
                 <Button variant="secondary" onClick={checkSession}><KeyRound size={16} />Cek Session</Button>
                 <Button variant="secondary" onClick={clearSession}>Hapus Session</Button>
+                </>}
                 <Link to="/profil" className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800">
                   Buka Profil
                 </Link>
