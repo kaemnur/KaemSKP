@@ -1,0 +1,107 @@
+{
+  "name": "kaemskp",
+  "version": "1.0.0",
+  "description": "KaemSKP - aplikasi desktop lokal Windows untuk Log Harian SKP",
+  "main": "out/main/index.js",
+  "author": "KaemSKP",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/server/index.ts --dev",
+    "worker": "tsx src/worker/index.ts",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/server/index.js",
+    "launcher": "node scripts/start-kaemskp.cjs",
+    "diagnose:skp": "tsx scripts/skp-diagnostic.ts",
+    "audit:sqlite": "tsx scripts/audit-sqlite.ts",
+    "migrate:supabase": "tsx scripts/migrate-sqlite-to-supabase.ts",
+    "test:supabase-crud": "tsx scripts/test-supabase-crud.ts",
+    "test:runtime-auth-rls": "tsx scripts/test-runtime-auth-rls.ts",
+    "test:next-auto-post": "tsx scripts/test-next-auto-post.ts",
+    "test:worker-scheduler": "tsx scripts/test-worker-scheduler.ts",
+    "dist": "npm run build"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "better-sqlite3": "^11.10.0",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "electron-updater": "^6.6.2",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "lucide-react": "^0.468.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "playwright": "^1.45.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1",
+    "tailwind-merge": "^2.6.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.19.1",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.1",
+    "autoprefixer": "^10.4.21",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19"
+  },
+  "build": {
+    "appId": "id.kaemnur.kaemskp",
+    "productName": "KaemSKP",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/playwright/**",
+      "node_modules/playwright-core/**",
+      "node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "KaemSKP Setup ${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "shortcutName": "KaemSKP"
+    }
+  },
+  "directories": {
+    "doc": "docs"
+  },
+  "keywords": []
+}
