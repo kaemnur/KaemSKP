@@ -1,12 +1,13 @@
 node_modules/
+release/
 out/
 dist/
-release/
 coverage/
 
+.git/
+.vercel/
 .env
-.env.local
-.env.*.local
+.env.*
 
 *.log
 *.db
@@ -33,5 +34,3 @@ docs/references/
 *.lnk
 
 .DS_Store
-
-.vercel/
