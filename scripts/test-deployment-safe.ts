@@ -22,6 +22,8 @@ async function main(): Promise<void> {
   assert(serverSource.includes("0.0.0.0"), "API production harus bind ke 0.0.0.0.");
   assert(serverSource.includes("CORS_ORIGIN"), "API production harus memakai CORS_ORIGIN.");
   assert(serverSource.includes("KAEMSKP_API_MODE"), "API harus punya mode API-only.");
+  assert(serverSource.includes("getSupabaseDashboardData") && serverSource.includes("usesSupabaseRuntime()"), "Dashboard API production harus memakai service Supabase, bukan SQLite lokal.");
+  assert(serverSource.includes("getPublicSkpAuthStatus"), "/api/auth/status production harus membaca skp_sessions Supabase.");
   console.log("ok - API source membaca PORT, production bind 0.0.0.0, dan CORS_ORIGIN");
 
   const api = await startApi();
@@ -55,7 +57,20 @@ async function main(): Promise<void> {
   assert(workerServiceSource.includes("WORKER_DRY_RUN") && workerServiceSource.includes("dryRunDidClickSubmit: false"), "Worker dry-run harus didukung dan tidak submit.");
   assert(workerServiceSource.includes("scheduler_jobs") && workerServiceSource.includes("locked_at") && workerServiceSource.includes("locked_by"), "Worker harus memakai scheduler_jobs sebagai lock.");
   assert(workerServiceSource.includes("verifyLogExistsOnSkp"), "Worker success harus memakai verifikasi website SKP.");
+  assert(workerServiceSource.includes("readSkpSessionForBackend") && workerServiceSource.includes("restoreStorageStateToWorker"), "Worker restart harus restore encrypted storage state dari Supabase.");
+  assert(workerServiceSource.includes("const checked = await checkSession()") && workerServiceSource.includes("const login = await openLogin()"), "checkSession gagal harus memicu login ulang headless.");
+  assert(workerServiceSource.indexOf("const checked = await checkSession()") < workerServiceSource.indexOf("const login = await openLogin()"), "Worker harus cek session hasil restore sebelum login ulang.");
   console.log("ok - worker terpisah, dry-run aman, lock anti-duplikasi, verifikasi SKP, dan shutdown signal tersedia");
+
+  const secureStoreSource = readFileSync(join(root, "src", "server", "services", "skpSecureStore.ts"), "utf8");
+  assert(secureStoreSource.includes("getPublicSkpAuthStatus") && secureStoreSource.includes("status = \"connected\""), "Session valid di Supabase harus tampil connected.");
+  assert(!/encrypted_storage_state.*return|encrypted_cookies.*return|encrypted_password.*return/i.test(secureStoreSource), "Status publik tidak boleh mengembalikan secret/session terenkripsi.");
+
+  const appLayoutSource = readFileSync(join(root, "src", "renderer", "src", "components", "layout", "AppLayout.tsx"), "utf8");
+  assert(appLayoutSource.includes("VITE_SINGLE_OWNER_MODE"), "Frontend harus mendukung single-owner mode.");
+  assert(!appLayoutSource.includes("Cek session browser SKP tersedia lewat API/worker"), "AppLayout Vercel tidak boleh memaksa status not_logged_in.");
+  assert(appLayoutSource.includes("Kredensial belum tersedia") && appLayoutSource.includes("Akun SKP tersimpan"), "Header harus menampilkan identitas/status SKP, bukan email Supabase sebagai identitas utama.");
+  console.log("ok - regression single-owner/dashboard/session/worker source guard tersedia");
 
   await verifyWorkerSigterm();
 

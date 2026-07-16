@@ -82,11 +82,13 @@ import { createHoliday, deleteHoliday, importHolidays, listHolidays, updateHolid
 import {
   deleteCredentials,
   getCredentialStatus,
+  getPublicSkpAuthStatus,
   getSkpSessionStatus as getEncryptedSkpSessionStatus,
   readCredentialsForBackend,
   saveCredentials,
   saveSkpSession
 } from "./services/skpSecureStore";
+import { getSupabaseDashboardData, getSupabaseMonthlySuccessData, getSupabaseTodayLogStatus } from "./services/dashboardService";
 
 dotenv.config({ path: join(process.cwd(), ".env.local"), override: false });
 
@@ -208,25 +210,38 @@ async function main(): Promise<void> {
     }
   });
 
-  app.get("/api/dashboard", async (_req, res, next) => {
+  app.get("/api/dashboard", async (req, res, next) => {
     try {
+      if (usesSupabaseRuntime()) {
+        res.json(await getSupabaseDashboardData(requireSupabaseClient(), authUserId(req)));
+        return;
+      }
       res.json(getDashboardData(getAuthStatus().status));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/dashboard/monthly-success", (req, res, next) => {
+  app.get("/api/dashboard/monthly-success", async (req, res, next) => {
     try {
       const requestedYear = Number(req.query.year ?? 2026);
-      res.json(getMonthlySuccessData(Number.isFinite(requestedYear) ? requestedYear : 2026));
+      const year = Number.isFinite(requestedYear) ? requestedYear : 2026;
+      if (usesSupabaseRuntime()) {
+        res.json(await getSupabaseMonthlySuccessData(requireSupabaseClient(), authUserId(req), year));
+        return;
+      }
+      res.json(getMonthlySuccessData(year));
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/dashboard/today-log-status", (_req, res, next) => {
+  app.get("/api/dashboard/today-log-status", async (req, res, next) => {
     try {
+      if (usesSupabaseRuntime()) {
+        res.json(await getSupabaseTodayLogStatus(requireSupabaseClient(), authUserId(req)));
+        return;
+      }
       res.json(getTodayLogStatus(getAuthStatus().status));
     } catch (error) {
       console.error("Gagal membaca status log hari ini", error);
@@ -675,7 +690,17 @@ async function main(): Promise<void> {
       next(error);
     }
   });
-  app.get("/api/auth/status", (_req, res) => res.json(getAuthStatus()));
+  app.get("/api/auth/status", async (req, res, next) => {
+    try {
+      if (usesSupabaseRuntime()) {
+        res.json(await getPublicSkpAuthStatus(requireSupabaseClient(), authUserId(req)));
+        return;
+      }
+      res.json(getAuthStatus());
+    } catch (error) {
+      next(error);
+    }
+  });
   app.post("/api/auth/clear-session", async (_req, res, next) => {
     try {
       res.json(await clearSession());
@@ -851,10 +876,14 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 function repositoryFor(req: express.Request) {
-  if (requestedBackend() === "supabase") {
+  if (usesSupabaseRuntime()) {
     return createSupabaseRepositoryForUser(authUserId(req));
   }
   return getRepository();
+}
+
+function usesSupabaseRuntime(): boolean {
+  return requestedBackend() === "supabase" || isApiOnlyMode;
 }
 
 function authUserId(req: express.Request): string {

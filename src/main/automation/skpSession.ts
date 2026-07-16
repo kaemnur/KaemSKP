@@ -1,5 +1,5 @@
 import { config as loadEnv } from "dotenv";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { getDataDir, getSetting } from "../db/database";
@@ -91,8 +91,10 @@ export async function getSkpContext(headless: boolean): Promise<BrowserContext> 
   const activeContext = getActiveSkpContext();
   if (activeContext) return activeContext;
 
+  const authStatePath = getAuthStatePath();
   skpContext = await chromium.launchPersistentContext(getSessionDir(), {
     headless,
+    ...(existsSync(authStatePath) ? { storageState: authStatePath } : {}),
     viewport: { width: 1366, height: 860 },
     locale: "id-ID",
     permissions: ["clipboard-read", "clipboard-write"],

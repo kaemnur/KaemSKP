@@ -1,18 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { config as loadEnv } from "dotenv";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPrivilegedSupabaseClient } from "../main/supabase/config";
 import { getNextAutoPostAt } from "../main/scheduler/nextAutoPost";
 import type { DailyLog } from "../main/types";
 import { closeAutomation, submitDailyLog, verifyLogExistsOnSkp } from "../main/automation/skpAutomation";
-import { getAuthStatePath, setRuntimeSkpCredentials } from "../main/automation/skpSession";
+import { getAuthStatePath, getSessionDir, getSkpContext, setRuntimeSkpCredentials } from "../main/automation/skpSession";
 import { checkSession, openLogin } from "../server/services/skpAuthService";
 import {
   getSkpSessionStatus as getEncryptedSkpSessionStatus,
   readCredentialsForBackend,
+  readSkpSessionForBackend,
   saveSkpSession
 } from "../server/services/skpSecureStore";
 
@@ -48,6 +49,7 @@ export type AutoPostSettingsRow = {
   worker_status: string | null;
   last_job_status: string | null;
   last_job_at: string | null;
+  last_worker_tick_at?: string | null;
 };
 
 export type HolidayRow = {
@@ -311,36 +313,57 @@ export class AutoPostWorkerService {
   }
 
   private async ensureSkpSession(userId: string): Promise<{ ok: boolean; message: string; errorCode?: string }> {
-    const [credentials, encryptedSession] = await Promise.all([
+    const [credentials, encryptedSession, storedSession] = await Promise.all([
       readCredentialsForBackend(this.supabase, userId),
-      getEncryptedSkpSessionStatus(this.supabase, userId)
+      getEncryptedSkpSessionStatus(this.supabase, userId),
+      readSkpSessionForBackend(this.supabase, userId)
     ]);
     setRuntimeSkpCredentials(credentials);
+
+    if (storedSession.storageState) {
+      await closeAutomation().catch(() => undefined);
+      restoreStorageStateToWorker(storedSession.storageState);
+      await getSkpContext(true);
+    }
+
+    const checked = await checkSession();
+    if (checked.status === "connected") {
+      await saveSkpSession(this.supabase, userId, {
+        status: "connected",
+        displayName: checked.displayName,
+        message: checked.message
+      });
+      return { ok: true, message: "Session SKP valid." };
+    }
 
     if (!credentials.username || !credentials.password) {
       return { ok: false, message: "Kredensial SKP belum tersimpan.", errorCode: "SKP_CREDENTIALS_MISSING" };
     }
 
-    const checked = await checkSession();
-    if (checked.status === "connected") return { ok: true, message: "Session SKP valid." };
-
-    if (!encryptedSession.configured || encryptedSession.status === "expired") {
-      const login = await openLogin();
-      if (login.status !== "connected") {
-        return { ok: false, message: "Login otomatis SKP gagal atau belum selesai.", errorCode: "SKP_LOGIN_FAILED" };
-      }
-      if (existsSync(getAuthStatePath())) {
-        await saveSkpSession(this.supabase, userId, {
-          status: "connected",
-          storageState: readFileSync(getAuthStatePath(), "utf8"),
-          displayName: login.displayName,
-          message: login.message
-        });
-      }
-      return { ok: true, message: "Login otomatis SKP berhasil." };
+    const login = await openLogin();
+    if (login.status !== "connected") {
+      await saveSkpSession(this.supabase, userId, {
+        status: "login_failed",
+        displayName: login.displayName,
+        message: publicErrorMessage(login.message || checked.message || "Login otomatis SKP gagal.")
+      });
+      return { ok: false, message: "Login otomatis SKP gagal atau belum selesai.", errorCode: "SKP_LOGIN_FAILED" };
     }
-
-    return { ok: false, message: "Session SKP tidak valid.", errorCode: "SKP_SESSION_INVALID" };
+    if (existsSync(getAuthStatePath())) {
+      await saveSkpSession(this.supabase, userId, {
+        status: "connected",
+        storageState: readFileSync(getAuthStatePath(), "utf8"),
+        displayName: login.displayName,
+        message: login.message
+      });
+    } else if (encryptedSession.configured) {
+      await saveSkpSession(this.supabase, userId, {
+        status: "connected",
+        displayName: login.displayName,
+        message: login.message
+      });
+    }
+    return { ok: true, message: "Login otomatis SKP berhasil." };
   }
 
   private async safeDryRunChecks(userId: string, logs: DailyLog[]): Promise<Record<string, unknown>> {
@@ -528,10 +551,7 @@ export class AutoPostWorkerService {
       .select("user_id,status")
       .single();
     if (error) throw new Error(error.message);
-    await this.supabase
-      .from("auto_post_settings")
-      .update({ worker_status: "idle", last_job_status: status, last_job_at: now, next_auto_post_at: nextAutoPostAt, updated_at: now })
-      .eq("user_id", data.user_id);
+    await this.updateAutoPostSettings(data.user_id, { worker_status: "idle", last_job_status: status, last_job_at: now, next_auto_post_at: nextAutoPostAt, last_worker_tick_at: now, updated_at: now });
   }
 
   private async upsertSubmission(
@@ -601,10 +621,21 @@ export class AutoPostWorkerService {
   }
 
   private async updateSettingsTick(userId: string, workerStatus: string, nextAutoPostAt: string | null): Promise<void> {
-    await this.supabase
-      .from("auto_post_settings")
-      .update({ worker_status: workerStatus, next_auto_post_at: nextAutoPostAt, updated_at: new Date().toISOString() })
-      .eq("user_id", userId);
+    const now = new Date().toISOString();
+    await this.updateAutoPostSettings(userId, { worker_status: workerStatus, next_auto_post_at: nextAutoPostAt, last_worker_tick_at: now, updated_at: now });
+  }
+
+  private async updateAutoPostSettings(userId: string, payload: Record<string, unknown>): Promise<void> {
+    const { error } = await this.supabase.from("auto_post_settings").update(payload).eq("user_id", userId);
+    if (!error) return;
+    if (payload.last_worker_tick_at !== undefined && /last_worker_tick_at|schema cache|column/i.test(error.message)) {
+      const fallback = { ...payload };
+      delete fallback.last_worker_tick_at;
+      const retry = await this.supabase.from("auto_post_settings").update(fallback).eq("user_id", userId);
+      if (!retry.error) return;
+      throw new Error(retry.error.message);
+    }
+    throw new Error(error.message);
   }
 
   private async latestJob(userId: string): Promise<SchedulerJobRow | null> {
@@ -784,6 +815,15 @@ function baseResult(
   safeChecks?: Record<string, unknown>
 ): WorkerTickResult {
   return { ok: !["failed", "login_failed", "verification_failed", "unsupported_backend"].includes(String(status)), dryRun, userId, workerId, nowWib, targetDate, nextAutoPostAt, status, jobId, dailyLogCount, message, safeChecks };
+}
+
+function restoreStorageStateToWorker(storageState: string): void {
+  JSON.parse(storageState);
+  getSessionDir();
+  const authStatePath = getAuthStatePath();
+  mkdirSync(dirname(authStatePath), { recursive: true });
+  writeFileSync(authStatePath, storageState, { encoding: "utf8", mode: 0o600 });
+  chmodSync(authStatePath, 0o600);
 }
 
 function sanitizeJob(job: SchedulerJobRow | null): Record<string, unknown> | null {

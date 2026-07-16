@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Cloud, Database, KeyRound, Save, ShieldAlert } from "lucide-react";
+import { CalendarDays, Cloud, Database, KeyRound, Loader2, LogOut, Save, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { DatePickerField } from "@/components/ui/date-picker";
 import { Input, Label, Select } from "@/components/ui/field";
 import { Notice } from "@/components/ui/state";
 import { api, isVercelDeployTarget } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { formatDateTimeWIB } from "@/lib/utils";
 
 type SkpAuthStatus = {
@@ -30,6 +31,7 @@ export function SettingsPage(): JSX.Element {
   const [saved, setSaved] = useState(false);
   const [dataNotice, setDataNotice] = useState<string | null>(null);
   const [theme, setTheme] = useState(() => localStorage.getItem("kaemskp-theme") ?? "light");
+  const [logoutBusy, setLogoutBusy] = useState(false);
 
   async function load(): Promise<void> {
     setSettings(await api.getSettings());
@@ -85,6 +87,14 @@ export function SettingsPage(): JSX.Element {
     if (!window.confirm("Hapus semua data log lokal, import batch, dan antrean? Pengaturan dan master SKP tetap disimpan.")) return;
     await api.clearLocalLogs();
     setDataNotice("Data log lokal berhasil dihapus.");
+  }
+
+  async function logoutSupabase(): Promise<void> {
+    if (!supabase) return;
+    if (!window.confirm("Logout dari aplikasi? Worker Auto Post tetap berjalan selama pengaturan Auto Post aktif.")) return;
+    setLogoutBusy(true);
+    await supabase.auth.signOut();
+    setLogoutBusy(false);
   }
 
   function updateTheme(value: string): void {
@@ -304,6 +314,22 @@ export function SettingsPage(): JSX.Element {
                 {session.lastCheckedAt ? ` - ${formatDateTimeWIB(session.lastCheckedAt)}` : ""}
               </Badge>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Akses Aplikasi</CardTitle>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Session Supabase mengamankan API. Logout di sini tidak menghentikan worker Auto Post.</p>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Gunakan hanya saat perlu keluar dari browser ini.
+            </div>
+            <Button variant="secondary" disabled={logoutBusy} onClick={logoutSupabase}>
+              {logoutBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut size={16} />}
+              Logout Aplikasi
+            </Button>
           </CardContent>
         </Card>
       </section>

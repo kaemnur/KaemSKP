@@ -23,6 +23,17 @@ export type DecryptedSkpCredentials = {
   password: string | null;
 };
 
+export type PublicSkpAuthStatus = {
+  status: "connected" | "not_logged_in" | "expired" | "checking" | "error";
+  isLoggedIn: boolean;
+  username: null;
+  displayName: string | null;
+  lastCheckedAt: string;
+  message: string;
+  configured: boolean;
+  credentialConfigured: boolean;
+};
+
 export function encryptSecret(value: string): string {
   const key = credentialKey();
   const iv = randomBytes(12);
@@ -105,22 +116,20 @@ export async function readCredentialsForBackend(supabase: SupabaseClient, userId
 export async function saveSkpSession(supabase: SupabaseClient, userId: string, input: SessionInput): Promise<{ status: string }> {
   const now = new Date().toISOString();
   const status = input.status ?? "unknown";
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    status,
+    display_name: input.displayName ?? null,
+    last_checked_at: now,
+    expires_at: input.expiresAt ?? null,
+    message: input.message ?? null,
+    updated_at: now
+  };
+  if (input.storageState !== undefined) row.encrypted_storage_state = input.storageState ? encryptSecret(input.storageState) : null;
+  if (input.cookies !== undefined) row.encrypted_cookies = input.cookies ? encryptSecret(input.cookies) : null;
   const { error } = await supabase
     .from("skp_sessions")
-    .upsert(
-      {
-        user_id: userId,
-        status,
-        encrypted_storage_state: input.storageState ? encryptSecret(input.storageState) : null,
-        encrypted_cookies: input.cookies ? encryptSecret(input.cookies) : null,
-        display_name: input.displayName ?? null,
-        last_checked_at: now,
-        expires_at: input.expiresAt ?? null,
-        message: input.message ?? null,
-        updated_at: now
-      },
-      { onConflict: "user_id" }
-    );
+    .upsert(row, { onConflict: "user_id" });
   if (error) throw new Error(error.message);
   return { status };
 }
@@ -143,6 +152,39 @@ export async function getSkpSessionStatus(supabase: SupabaseClient, userId: stri
     return { status: "valid", configured: true, lastCheckedAt: data.last_checked_at ?? null };
   }
   return { status: "unknown", configured: Boolean(data.encrypted_storage_state || data.encrypted_cookies), lastCheckedAt: data.last_checked_at ?? null };
+}
+
+export async function getPublicSkpAuthStatus(supabase: SupabaseClient, userId: string): Promise<PublicSkpAuthStatus> {
+  const [credential, session] = await Promise.all([
+    getCredentialStatus(supabase, userId),
+    supabase
+      .from("skp_sessions")
+      .select("status,encrypted_storage_state,encrypted_cookies,display_name,last_checked_at,expires_at,message")
+      .eq("user_id", userId)
+      .maybeSingle()
+  ]);
+  if (session.error) throw new Error(session.error.message);
+
+  const row = session.data;
+  const configured = Boolean(row?.encrypted_storage_state || row?.encrypted_cookies);
+  const rawStatus = String(row?.status ?? "unknown");
+  let status: PublicSkpAuthStatus["status"] = "not_logged_in";
+  if (rawStatus === "error") status = "error";
+  else if (rawStatus === "login_failed") status = "error";
+  else if (rawStatus === "expired" || rawStatus === "not_logged_in" || (row?.expires_at && new Date(row.expires_at).getTime() <= Date.now())) status = "expired";
+  else if ((rawStatus === "connected" || rawStatus === "valid") && configured) status = "connected";
+  else status = "not_logged_in";
+
+  return {
+    status,
+    isLoggedIn: status === "connected",
+    username: null,
+    displayName: typeof row?.display_name === "string" && row.display_name.trim() ? row.display_name : null,
+    lastCheckedAt: row?.last_checked_at ?? new Date().toISOString(),
+    message: publicSessionMessage(status, credential.configured, configured, row?.message),
+    configured,
+    credentialConfigured: credential.configured
+  };
 }
 
 export async function readSkpSessionForBackend(supabase: SupabaseClient, userId: string): Promise<{ storageState: string | null; cookies: string | null }> {
@@ -171,4 +213,13 @@ function credentialKey(): Buffer {
     throw new Error("SKP_CREDENTIAL_ENCRYPTION_KEY minimal 32 karakter.");
   }
   return createHash("sha256").update(configured).digest();
+}
+
+function publicSessionMessage(status: PublicSkpAuthStatus["status"], credentialConfigured: boolean, sessionConfigured: boolean, storedMessage?: string | null): string {
+  if (status === "connected") return storedMessage || "Terhubung ke SKP.";
+  if (!credentialConfigured) return "Kredensial belum tersedia.";
+  if (status === "expired") return storedMessage || "Perlu login ulang.";
+  if (status === "error") return storedMessage || "Gagal mengecek session SKP.";
+  if (!sessionConfigured) return "Session SKP belum tersedia.";
+  return storedMessage || "Session SKP belum bisa dipastikan.";
 }

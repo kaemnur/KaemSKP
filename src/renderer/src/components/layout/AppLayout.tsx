@@ -32,9 +32,13 @@ const pageMeta = [
 type SkpStatus = {
   status: "connected" | "not_logged_in" | "expired" | "checking" | "error";
   message: string;
+  displayName?: string | null;
+  configured?: boolean;
+  credentialConfigured?: boolean;
 };
 
 type ThemeMode = "light" | "dark";
+const isSingleOwnerMode = import.meta.env.VITE_SINGLE_OWNER_MODE === "true";
 
 function readStoredTheme(): ThemeMode {
   return localStorage.getItem("kaemskp-theme") === "dark" ? "dark" : "light";
@@ -93,7 +97,7 @@ export function AppLayout(): JSX.Element {
 
   async function checkSession(): Promise<void> {
     if (isVercelDeployTarget) {
-      setSession({ status: "not_logged_in", message: "Cek session browser SKP tersedia lewat API/worker, bukan dari browser Vercel." });
+      setSession(await api.authStatus());
       return;
     }
     setBusy("check");
@@ -172,6 +176,7 @@ export function AppLayout(): JSX.Element {
   }, []);
 
   const needsLogin = ["not_logged_in", "expired", "error"].includes(session.status);
+  const skpIdentity = session.displayName || (session.credentialConfigured ? "Akun SKP tersimpan" : "Kredensial belum tersedia");
 
   if (!isSupabaseFrontendConfigured) {
     return <AuthShell title="Supabase belum dikonfigurasi" message="VITE_SUPABASE_URL dan VITE_SUPABASE_PUBLISHABLE_KEY wajib tersedia di frontend." />;
@@ -252,10 +257,10 @@ export function AppLayout(): JSX.Element {
                 {clock}
               </div>
               <Badge status={session.status} className="min-h-9 max-w-full">
-                {busy === "check" ? "Mengecek session..." : statusLabel(session.status)}
+                {busy === "check" ? "Mengecek session..." : headerSessionLabel(session)}
               </Badge>
               <div className="hidden max-w-[220px] truncate rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 md:block">
-                {authUserEmail}
+                {skpIdentity}
               </div>
               {!isVercelDeployTarget && <Button size="sm" variant="secondary" disabled={busy !== null} onClick={checkSession}>
                 {busy === "check" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={14} />}
@@ -276,9 +281,11 @@ export function AppLayout(): JSX.Element {
               >
                 {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
               </Button>
-              <Button size="icon" variant="ghost" aria-label="Logout Supabase" title="Logout" disabled={authBusy !== null} onClick={logoutSupabase}>
-                {authBusy === "logout" ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut size={17} />}
-              </Button>
+              {!isSingleOwnerMode && (
+                <Button size="icon" variant="ghost" aria-label="Logout Supabase" title="Logout" disabled={authBusy !== null} onClick={logoutSupabase}>
+                  {authBusy === "logout" ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut size={17} />}
+                </Button>
+              )}
             </div>
           </div>
           <div className="mt-2 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400 md:hidden">{clock}</div>
@@ -289,6 +296,13 @@ export function AppLayout(): JSX.Element {
       </main>
     </div>
   );
+}
+
+function headerSessionLabel(session: SkpStatus): string {
+  if (session.status === "connected") return "Terhubung ke SKP";
+  if (session.status === "expired") return "Perlu login ulang";
+  if (!session.credentialConfigured) return "Kredensial belum tersedia";
+  return statusLabel(session.status);
 }
 
 function AuthShell({ title, message, children }: { title: string; message: string; children?: ReactNode }): JSX.Element {
